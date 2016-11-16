@@ -280,6 +280,13 @@ app.get('/tasksJSON', function(req, res, next)
 
 app.get('/awaitTask', function(req, res, next)
 {
+    if(task_queue.length != 0)
+    {
+        res.status(200);
+        res.end("Task available");
+        return;
+    }
+
     var callback = function()
     {
         res.status(200);
