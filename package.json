@@ -1,0 +1,25 @@
+{
+  "name": "reading_reciever",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "nohup": "nohup npm start &",
+    "clean": "rm -rf splits uploads",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "cors": "^2.8.1",
+    "express": "^4.14.0",
+    "fs-symlink": "^1.2.1",
+    "list-directory-contents": "0.0.3",
+    "mkdirp": "^0.5.1",
+    "multer": "^1.2.0",
+    "serve-index": "^1.8.0",
+    "shortid": "^2.2.6"
+  }
+}
