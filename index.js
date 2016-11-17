@@ -7,6 +7,8 @@ var ls      = require('list-directory-contents');
 var bodyParser = require('body-parser')
 var shortid = require('shortid');
 var EventEmitter = require('events');
+var fs = require('fs');
+var fileExists = require('file-exists');
 
 var app = express();
 
@@ -18,19 +20,24 @@ app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
 
 var upload_folder  = 'uploads';
 var split_folder   = 'splits';
+var output_folder  = 'output';
 
 // Ensure that folders are created
 var folder_callback = function(err) { if(err) console.error(err); };
 mkdirp(upload_folder, folder_callback);
 mkdirp(split_folder, folder_callback);
+mkdirp(output_folder, folder_callback);
 
 // Serve contents of uploads folder
 var directory = require('serve-index');
 app.use('/uploads/', directory(upload_folder, {'icons': true}));
 app.use('/uploads/', express.static(upload_folder + '/'));
-// ... and of the symlinks folder
+// ... and of the splits folder
 app.use('/splits/', directory(split_folder, {'icons': true}));
 app.use('/splits/', express.static(split_folder + '/'));
+// ... and of the output folder
+app.use('/output/', directory(output_folder, {'icons': true}));
+app.use('/output/', express.static(output_folder + '/'));
 
 var task_queue = [];
 var task_queue_emitter = new EventEmitter();
@@ -77,6 +84,7 @@ app.post('/knn', cpUpload, function(req, res, next)
     var query_split = req.body.split;
     // Calculation timeout
     var timeout = req.body.timeout;
+    // TODO: Check that these are set
 
     num_lines_file(query.path, function(err, lines)
     {
@@ -134,14 +142,28 @@ app.post('/knn', cpUpload, function(req, res, next)
                         });
                         // Merge all results into a single blob
                         var merged = [].concat.apply([], results);
-                        // Reply with the result
-                        res.status(200);
-                        res.end(JSON.stringify(merged));
+                        // Get a stringied version
+                        var return_str = JSON.stringify(merged);
+                        // Write this to the output folder
+                        fs.writeFile(output_folder + '/' + task.name, return_str, function(err) 
+                        {
+                            if(err)
+                            {
+                                res.status(500);
+                                res.end(JSON.stringify(err));
+                                return;
+                            }
+                            task_queue_emitter.emit('complete', merged, return_str);
+                        });
                     }.bind(null, res)
                 }
                 // Add the task
                 task_queue.push(task);
                 task_queue_emitter.emit('add');
+
+                // Reply with the result
+                res.status(200);
+                res.end(task.name);
             });
         });
     });
@@ -295,6 +317,53 @@ app.get('/awaitTask', function(req, res, next)
     }
 
     task_queue_emitter.addListener('add', callback);
+});
+
+app.get('/awaitComplete', function(req, res, next)
+{
+    var name = req.query.name;
+
+    // Find the task we got something back from
+    var queueIndex = task_queue.findIndex(function(element)
+    {
+        return element.name == name;
+    });
+    if(queueIndex == -1)
+    {
+        var filename = output_folder + '/' + name;
+        if(fileExists(filename))
+        {
+            fs.readFile(filename, 'utf8', function(err, data) 
+            {
+                if (err) 
+                {
+                    res.status(500);
+                    res.end(JSON.stringify(err));
+                    return;
+                }
+                res.status(200);
+                res.end(data);
+            });
+        }
+        else
+        {
+            res.status(400);
+            res.end("No task named: " + name);
+            return;
+        }
+    }
+    else
+    {
+        var callback = function(json, str)
+        {
+            res.status(200);
+            res.end(str);
+            task_queue_emitter.removeListener('complete', callback);
+        }
+
+        // It's still running
+        task_queue_emitter.addListener('complete', callback);
+    }
 });
 
 app.get('/tasks', function(req, res, next)
