@@ -13,7 +13,9 @@ var fileExists = require('file-exists');
 var app = express();
 
 app.use(cors());
-app.use(bodyParser.json());       // to support JSON-encoded bodies
+app.use(bodyParser.json({ // to support JSON-encoded bodies
+    limit: Number.POSITIVE_INFINITY
+}));
 app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
   extended: true
 })); 
@@ -78,8 +80,6 @@ app.post('/knn', cpUpload, function(req, res, next)
     }
     // TODO: Check validity of file
 
-    // Knn value
-    var knn = req.body.knn;
     // Query split
     var query_split = req.body.split;
     // Calculation timeout
@@ -123,7 +123,13 @@ app.post('/knn', cpUpload, function(req, res, next)
                 });
                 var queries = filtered.map(function(element)
                 {
-                    return {path: element, running: false, done: false, timer: null};
+                    return {
+                        path: element, 
+                        running: false,
+                        done: false, 
+                        timer: null, 
+                        part: element.substring(element.indexOf('/') + 1).replace(query.filename, '')
+                    };
                 });
 
                 var task = {
@@ -131,7 +137,6 @@ app.post('/knn', cpUpload, function(req, res, next)
                     query: queries,
                     query_full: query.path,
                     reference: reference.path,
-                    knn: knn,
                     timeout: timeout,
                     complete: function(res, task)
                     {
@@ -153,7 +158,7 @@ app.post('/knn', cpUpload, function(req, res, next)
                                 res.end(JSON.stringify(err));
                                 return;
                             }
-                            task_queue_emitter.emit('complete', merged, return_str);
+                            task_queue_emitter.emit('complete', task.name, merged, return_str);
                         });
                     }.bind(null, res)
                 }
@@ -191,7 +196,7 @@ var acquire_task = function(id, callback)
     task.query[queryIndex].running = true;
     task.query[queryIndex].timer = setTimeout(function(task, index)
     {
-        console.info("Cleaned timer", task.name, "index:", queryIndex);
+        console.info("Triggered reset timer", task.name, "index:", queryIndex);
         task.query[queryIndex].running = false;
         task.query[queryIndex].timer = null;
     }.bind(null,task,queryIndex), task.timeout);
@@ -217,10 +222,11 @@ app.get('/requestTask', function(req, res, next)
                 return;
             }
             res.status(200);
+
             res.end(JSON.stringify({
                 reference: task.reference,
                 query: query.path,
-                knn: task.knn,
+                part: query.part,
                 name: task.name
             }));
         });
@@ -230,6 +236,7 @@ app.get('/requestTask', function(req, res, next)
 app.post('/replyTask', function(req, res, next)
 {
     var json = req.body;
+
     // Find the task we got something back from
     var queueIndex = task_queue.findIndex(function(element)
     {
@@ -258,8 +265,9 @@ app.post('/replyTask', function(req, res, next)
     task.query[queryIndex].done = true;
     task.query[queryIndex].running = false;
     task.query[queryIndex].timer = null;
-    task.query[queryIndex].result = json.result.data;
-
+    task.query[queryIndex].result = json.result;
+    // Fire our update event
+    // task_queue_emitter.emit('update', task, task.query[queryIndex])
     // TODO: Check if all are done
     var all_done = task.query.reduce(function(a, b)
     {
@@ -300,23 +308,50 @@ app.get('/tasksJSON', function(req, res, next)
     }));
 });
 
-app.get('/awaitTask', function(req, res, next)
+var peek_task = function(id, callback)
 {
-    if(task_queue.length != 0)
+    if(id >= task_queue.length)
     {
-        res.status(200);
-        res.end("Task available");
+        callback(false);
         return;
     }
 
-    var callback = function()
+    var task = task_queue[id];
+    var queryIndex = task.query.findIndex(function(element)
     {
-        res.status(200);
-        res.end("Task available");
-        task_queue_emitter.removeListener('add', callback);
+        return !element.running && !element.done;
+    });
+    if(queryIndex == -1)
+    {
+        peek_task(id+1, callback);
+        return;
     }
 
-    task_queue_emitter.addListener('add', callback);
+    callback(true);
+}
+
+app.get('/awaitTask', function(req, res, next)
+{
+    peek_task(0, function(available, index)
+    {
+        if(available)
+        {
+            res.status(200);
+            res.end("Task is directly available");
+            return;
+        }
+        else
+        {
+            var callback = function()
+            {
+                res.status(200);
+                res.end("Task available");
+                task_queue_emitter.removeListener('add', callback);
+            }
+
+            task_queue_emitter.addListener('add', callback);
+        }
+    });
 });
 
 app.get('/awaitComplete', function(req, res, next)
@@ -354,11 +389,14 @@ app.get('/awaitComplete', function(req, res, next)
     }
     else
     {
-        var callback = function(json, str)
+        var callback = function(task_name, json, str)
         {
-            res.status(200);
-            res.end(str);
-            task_queue_emitter.removeListener('complete', callback);
+            if(task_name == name)
+            {
+                res.status(200);
+                res.end(str);
+                task_queue_emitter.removeListener('complete', callback);
+            }
         }
 
         // It's still running
