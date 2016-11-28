@@ -23,12 +23,14 @@ app.use(bodyParser.urlencoded({     // to support URL-encoded bodies
 var upload_folder  = 'uploads';
 var split_folder   = 'splits';
 var output_folder  = 'output';
+var done_folder    = 'done';
 
 // Ensure that folders are created
 var folder_callback = function(err) { if(err) console.error(err); };
 mkdirp(upload_folder, folder_callback);
 mkdirp(split_folder, folder_callback);
 mkdirp(output_folder, folder_callback);
+mkdirp(done_folder , folder_callback);
 
 // Serve contents of uploads folder
 var directory = require('serve-index');
@@ -40,6 +42,9 @@ app.use('/splits/', express.static(split_folder + '/'));
 // ... and of the output folder
 app.use('/output/', directory(output_folder, {'icons': true}));
 app.use('/output/', express.static(output_folder + '/'));
+// ... and of the done folder
+app.use('/done/', directory(done_folder, {'icons': true}));
+app.use('/done/', express.static(done_folder + '/'));
 
 var task_queue = [];
 var task_queue_emitter = new EventEmitter();
@@ -50,9 +55,22 @@ var num_lines_file = function(filepath, callback)
     exec('wc -l ' + filepath + ' | cut -f1 -d" "', callback); 
 }
 
-var split_file = function(file, num, callback)
+var split_file = function(filein, fileout, num, lines, callback)
 {
-    exec('split -l ' + (3 * num) + ' ../' + file.path + " " + file.filename, {cwd: split_folder}, callback); 
+    exec('split -l ' + (3 * num) + ' -d -a 5 ../' + filein + " " + fileout + "_part_", {cwd: split_folder}, callback); 
+}
+
+var remove = function(file, callback)
+{
+    exec('rm ' + file, callback);
+}
+
+var combine_json_executable = 'node ./combine_json/index.js'
+var combine_json = function(startswith, output_file, callback)
+{
+    exec(combine_json_executable + " -o " + output_file + " " + startswith, 
+            {maxBuffer: Number.POSITIVE_INFINITY},
+            callback);
 }
 
 // Upload file to server
@@ -101,7 +119,8 @@ app.post('/knn', cpUpload, function(req, res, next)
             res.end("#Lines in query isn't a multiple of 3!");
             return;
         }
-        split_file(query, query_split, function(err, lines)
+        var taskname = shortid.generate();
+        split_file(query.path, taskname, query_split, lines, function(err, lines)
         {
             if(err)
             {
@@ -119,38 +138,30 @@ app.post('/knn', cpUpload, function(req, res, next)
                 }
                 var filtered = tree.filter(function(element)
                 {
-                    return element.startsWith(split_folder + '/' + query.filename);
+                    return element.startsWith(split_folder + '/' + taskname);
                 });
                 var queries = filtered.map(function(element)
                 {
                     return {
                         path: element, 
-                        running: false,
-                        done: false, 
                         timer: null, 
-                        part: element.substring(element.indexOf('/') + 1).replace(query.filename, '')
+                        part: element.substring(element.indexOf('/') + 1).replace(taskname, ''),
+                        result: null
                     };
                 });
 
                 var task = {
-                    name: shortid.generate(),
+                    name: taskname,
                     query: queries,
                     query_full: query.path,
                     reference: reference.path,
                     timeout: timeout,
-                    complete: function(res, task)
+                    part_done: function(res, task, queryIndex, queueIndex, result, callback)
                     {
-                        // Pull out the results
-                        var results = task.query.map(function(element)
-                        {
-                            return element.result;
-                        });
-                        // Merge all results into a single blob
-                        var merged = [].concat.apply([], results);
-                        // Get a stringied version
-                        var return_str = JSON.stringify(merged);
-                        // Write this to the output folder
-                        fs.writeFile(output_folder + '/' + task.name, return_str, function(err) 
+                        // Part output name
+                        var filename = done_folder + '/' + task.name + task.query[queryIndex].part;
+                        // Write out the part file
+                        fs.writeFile(filename, JSON.stringify(result), function(err) 
                         {
                             if(err)
                             {
@@ -158,10 +169,82 @@ app.post('/knn', cpUpload, function(req, res, next)
                                 res.end(JSON.stringify(err));
                                 return;
                             }
-                            task_queue_emitter.emit('complete', task.name, merged, return_str);
+                            // Remove the query file
+                            remove(task.query[queryIndex].path, function(err, lines)
+                            {
+                                if(err)
+                                {
+                                    res.status(500);
+                                    res.end(JSON.stringify(err));
+                                    return;
+                                }
+
+                                // Mark as done
+                                // TODO: Read it out by reference?
+                                clearTimeout(task.query[queryIndex].timer);
+                                task.query[queryIndex].timer = null;
+                                task.query[queryIndex].result = filename;
+
+                                // Check if the entire task is complete
+                                var all_done = task.query.reduce(function(a, b)
+                                {
+                                    return a && (b.result != undefined);
+                                }, true);
+                                // If it is complete, annouce it, and run complete handler
+                                if(all_done)
+                                {
+                                    task.complete(res, task, queueIndex, callback);
+                                    return;
+                                }
+                                else // Otherwise just report that we're done
+                                {
+                                    res.status(200);
+                                    res.end("Succes");
+                                }
+                            });
                         });
-                    }.bind(null, res)
+                    },
+                    complete: function(res, task, queueIndex, callback)
+                    {
+                        var error_handler = function(next)
+                        {
+                            return function(err, stdout, stderr)
+                            {
+                                if(err)
+                                {
+                                    res.status(500);
+                                    res.end(JSON.stringify(err) + JSON.stringify(stderr));
+                                    return;
+                                }
+                                next(stdout);
+                            }
+                        }
+                        // Remove the collected query set
+                        remove(task.query_full, error_handler(function()
+                        {
+                            // ... and the collected reference set
+                            remove(task.reference, error_handler(function()
+                            {
+                                // Combine the result
+                                var starts = done_folder + "/" + taskname + "_part_";
+                                combine_json(starts, output_folder + '/' + task.name, error_handler(function(result)
+                                {
+                                    remove(starts + '*', error_handler(function()
+                                    {
+                                        console.log("Task:", task.name, "done!");
+                                        task_queue_emitter.emit('complete', task.name, result);
+                                        // Remove from the task queue
+                                        task_queue.splice(queueIndex, 1);
+                                        task_queue_emitter.emit('remove', queueIndex);
+                                        callback();
+                                    }));
+                                }));
+                            }));
+                        }));
+                    }
                 }
+                console.log("New task added (", task.name , "):", queries.length, "subtasks!");
+
                 // Add the task
                 task_queue.push(task);
                 task_queue_emitter.emit('add');
@@ -185,7 +268,7 @@ var acquire_task = function(id, callback)
     var task = task_queue[id];
     var queryIndex = task.query.findIndex(function(element)
     {
-        return !element.running && !element.done;
+        return element.timer == null && element.result == null;
     });
     if(queryIndex == -1)
     {
@@ -193,11 +276,9 @@ var acquire_task = function(id, callback)
         return;
     }
 
-    task.query[queryIndex].running = true;
     task.query[queryIndex].timer = setTimeout(function(task, index)
     {
         console.info("Triggered reset timer", task.name, "index:", queryIndex);
-        task.query[queryIndex].running = false;
         task.query[queryIndex].timer = null;
     }.bind(null,task,queryIndex), task.timeout);
 
@@ -261,28 +342,11 @@ app.post('/replyTask', function(req, res, next)
         return;
     }
     // Set that query as done
-    clearTimeout(task.query[queryIndex].timer);
-    task.query[queryIndex].done = true;
-    task.query[queryIndex].running = false;
-    task.query[queryIndex].timer = null;
-    task.query[queryIndex].result = json.result;
-    // Fire our update event
-    // task_queue_emitter.emit('update', task, task.query[queryIndex])
-    // TODO: Check if all are done
-    var all_done = task.query.reduce(function(a, b)
+    task.part_done(res, task, queryIndex, queueIndex, json.result, function()
     {
-        return a && b.done;
-    }, true);
-    if(all_done)
-    {
-        console.log("Task:", task.name, "done!");
-        task.complete(task);
-        task_queue.splice(queueIndex, 1);
-        task_queue_emitter.emit('remove', queueIndex);
-    }
-
-    res.status(200);
-    res.end("Succes");
+        res.status(200);
+        res.end("Succes");
+    });
 });
 
 app.get('/tasksJSON', function(req, res, next)
@@ -319,7 +383,7 @@ var peek_task = function(id, callback)
     var task = task_queue[id];
     var queryIndex = task.query.findIndex(function(element)
     {
-        return !element.running && !element.done;
+        return element.timer == null && element.result == null;
     });
     if(queryIndex == -1)
     {
@@ -389,7 +453,7 @@ app.get('/awaitComplete', function(req, res, next)
     }
     else
     {
-        var callback = function(task_name, json, str)
+        var callback = function(task_name, str)
         {
             if(task_name == name)
             {
