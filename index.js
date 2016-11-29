@@ -12,6 +12,97 @@ var fileExists = require('file-exists');
 
 var app = express();
 
+var task_part_done = function(res, task, queryIndex, queueIndex, result, callback)
+{
+    // Part output name
+    var filename = done_folder + '/' + task.name + task.query[queryIndex].part;
+    // Write out the part file
+    fs.writeFile(filename, JSON.stringify(result), function(err) 
+    {
+        if(err)
+        {
+            res.status(500);
+            res.end(JSON.stringify(err));
+            return;
+        }
+        // Remove the query file
+        remove(task.query[queryIndex].path, function(err, lines)
+        {
+            if(err)
+            {
+                res.status(500);
+                res.end(JSON.stringify(err));
+                return;
+            }
+
+            // Mark as done
+            // TODO: Read it out by reference?
+            clearTimeout(task.query[queryIndex].timer);
+            task.query[queryIndex].timer = null;
+            task.query[queryIndex].result = filename;
+
+            task_queue_emitter.emit('edit');
+
+            // Check if the entire task is complete
+            var all_done = task.query.reduce(function(a, b)
+            {
+                return a && (b.result != undefined);
+            }, true);
+            // If it is complete, annouce it, and run complete handler
+            if(all_done)
+            {
+                task.complete(res, task, queueIndex, callback);
+                return;
+            }
+            else // Otherwise just report that we're done
+            {
+                res.status(200);
+                res.end("Succes");
+            }
+        });
+    });
+}
+
+var task_complete = function(res, task, queueIndex, callback)
+{
+    var error_handler = function(next)
+    {
+        return function(err, stdout, stderr)
+        {
+            if(err)
+            {
+                res.status(500);
+                res.end(JSON.stringify(err) + JSON.stringify(stderr));
+                return;
+            }
+            next(stdout);
+        }
+    }
+    // Remove the collected query set
+    remove(task.query_full, error_handler(function()
+    {
+        // ... and the collected reference set
+        remove(task.reference, error_handler(function()
+        {
+            // Combine the result
+            var starts = done_folder + "/" + task.name + "_part_";
+            combine_json(starts, output_folder + '/' + task.name, error_handler(function(result)
+            {
+                remove(starts + '*', error_handler(function()
+                {
+                    console.log("Task:", task.name, "done!");
+                    task_queue_emitter.emit('complete', task.name, result);
+                    // Remove from the task queue
+                    task_queue.splice(queueIndex, 1);
+                    task_queue_emitter.emit('remove', queueIndex);
+                    callback();
+                }));
+            }));
+        }));
+    }));
+}
+
+
 app.use(cors());
 app.use(bodyParser.json({ // to support JSON-encoded bodies
     limit: Number.POSITIVE_INFINITY
@@ -158,92 +249,8 @@ app.post('/knn', cpUpload, function(req, res, next)
                     reference: reference.path,
                     timeout: timeout,
                     dtw_args: dtw_args,
-                    part_done: function(res, task, queryIndex, queueIndex, result, callback)
-                    {
-                        // Part output name
-                        var filename = done_folder + '/' + task.name + task.query[queryIndex].part;
-                        // Write out the part file
-                        fs.writeFile(filename, JSON.stringify(result), function(err) 
-                        {
-                            if(err)
-                            {
-                                res.status(500);
-                                res.end(JSON.stringify(err));
-                                return;
-                            }
-                            // Remove the query file
-                            remove(task.query[queryIndex].path, function(err, lines)
-                            {
-                                if(err)
-                                {
-                                    res.status(500);
-                                    res.end(JSON.stringify(err));
-                                    return;
-                                }
-
-                                // Mark as done
-                                // TODO: Read it out by reference?
-                                clearTimeout(task.query[queryIndex].timer);
-                                task.query[queryIndex].timer = null;
-                                task.query[queryIndex].result = filename;
-
-                                // Check if the entire task is complete
-                                var all_done = task.query.reduce(function(a, b)
-                                {
-                                    return a && (b.result != undefined);
-                                }, true);
-                                // If it is complete, annouce it, and run complete handler
-                                if(all_done)
-                                {
-                                    task.complete(res, task, queueIndex, callback);
-                                    return;
-                                }
-                                else // Otherwise just report that we're done
-                                {
-                                    res.status(200);
-                                    res.end("Succes");
-                                }
-                            });
-                        });
-                    },
-                    complete: function(res, task, queueIndex, callback)
-                    {
-                        var error_handler = function(next)
-                        {
-                            return function(err, stdout, stderr)
-                            {
-                                if(err)
-                                {
-                                    res.status(500);
-                                    res.end(JSON.stringify(err) + JSON.stringify(stderr));
-                                    return;
-                                }
-                                next(stdout);
-                            }
-                        }
-                        // Remove the collected query set
-                        remove(task.query_full, error_handler(function()
-                        {
-                            // ... and the collected reference set
-                            remove(task.reference, error_handler(function()
-                            {
-                                // Combine the result
-                                var starts = done_folder + "/" + taskname + "_part_";
-                                combine_json(starts, output_folder + '/' + task.name, error_handler(function(result)
-                                {
-                                    remove(starts + '*', error_handler(function()
-                                    {
-                                        console.log("Task:", task.name, "done!");
-                                        task_queue_emitter.emit('complete', task.name, result);
-                                        // Remove from the task queue
-                                        task_queue.splice(queueIndex, 1);
-                                        task_queue_emitter.emit('remove', queueIndex);
-                                        callback();
-                                    }));
-                                }));
-                            }));
-                        }));
-                    }
+                    part_done: task_part_done,
+                    complete: task_complete,
                 }
                 console.log("New task added (", task.name , "):", queries.length, "subtasks!");
 
@@ -352,10 +359,9 @@ app.post('/replyTask', function(req, res, next)
     });
 });
 
-app.get('/tasksJSON', function(req, res, next)
+var task_queue_string = function()
 {
-    res.status(200);
-    res.end(JSON.stringify(task_queue, function(key, value)
+    return JSON.stringify(task_queue, function(key, value)
     {
         if(key == 'timer')
         {
@@ -372,7 +378,13 @@ app.get('/tasksJSON', function(req, res, next)
         {
             return value; 
         }
-    }));
+    });
+}
+
+app.get('/tasksJSON', function(req, res, next)
+{
+    res.status(200);
+    res.end(task_queue_string());
 });
 
 var peek_task = function(id, callback)
@@ -527,8 +539,49 @@ app.get('/', function(req, res)
     res.sendFile("index.html", {root: __dirname});
 });
 
-var port = 3001;
-app.listen(port, function() 
+var task_queue_file = 'taskqueue.json';
+var update_taskqueue_json = function()
 {
-    console.log('Reading reciever server on port: ' + port);
+    fs.writeFile(task_queue_file, task_queue_string(), function(err) 
+    {
+        if(err)
+        {
+            console.warn("Couldn't update taskqueue file!");
+            return;
+        }
+    });
+}
+
+task_queue_emitter.on('remove', update_taskqueue_json);
+task_queue_emitter.on('add', update_taskqueue_json);
+task_queue_emitter.on('edit', update_taskqueue_json);
+
+fs.readFile(task_queue_file, 'utf8', function(err, data) 
+{
+    if (err) 
+    {
+        console.warn("Couldn't read taskqueue file, starting anew!");
+    }
+    else
+    {
+        task_queue = JSON.parse(data);
+    }
+    // Clear all timers
+    task_queue.forEach(function(task)
+    {
+        task.query.forEach(function(query)
+        {
+            query.timer = null;
+        });
+        task.part_done = task_part_done;
+        task.complete = task_complete;
+    });
+
+    // Start the server
+    var port = 3001;
+    app.listen(port, function() 
+    {
+        console.log('Reading reciever server on port: ' + port);
+    });
 });
+
