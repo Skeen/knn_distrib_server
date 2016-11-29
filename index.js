@@ -11,6 +11,7 @@ var fs = require('fs');
 var fileExists = require('file-exists');
 
 var app = express();
+var server = null;
 
 var task_part_done = function(res, task, queryIndex, queueIndex, result, callback)
 {
@@ -531,7 +532,22 @@ app.get('/progress', function(req, res, next)
             }
         });
     }
+});
 
+app.get('/shutdown', function(req, res)
+{
+    // Shutdown everything
+    setTimeout(function()
+    {
+        console.log("Starting Shutdown...");
+        server.shutdown(function()
+        {
+            console.log("Server closed!");
+        });
+    }, 0);
+
+    res.status(200);
+    res.end("Shutting down!");
 });
 
 app.get('/', function(req, res)
@@ -579,9 +595,10 @@ fs.readFile(task_queue_file, 'utf8', function(err, data)
 
     // Start the server
     var port = 3001;
-    app.listen(port, function() 
+    var app_server = app.listen(port, function() 
     {
         console.log('Reading reciever server on port: ' + port);
     });
+    server = require('http-shutdown')(app_server);
 });
 
