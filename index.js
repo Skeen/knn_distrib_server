@@ -103,6 +103,7 @@ app.post('/knn', cpUpload, function(req, res, next)
     // Calculation timeout
     var timeout = req.body.timeout;
     // TODO: Check that these are set
+    var dtw_args = req.body.dtw_args;
 
     num_lines_file(query.path, function(err, lines)
     {
@@ -156,6 +157,7 @@ app.post('/knn', cpUpload, function(req, res, next)
                     query_full: query.path,
                     reference: reference.path,
                     timeout: timeout,
+                    dtw_args: dtw_args,
                     part_done: function(res, task, queryIndex, queueIndex, result, callback)
                     {
                         // Part output name
@@ -308,6 +310,7 @@ app.get('/requestTask', function(req, res, next)
                 reference: task.reference,
                 query: query.path,
                 part: query.part,
+                dtw_args: task.dtw_args,
                 name: task.name
             }));
         });
