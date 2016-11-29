@@ -391,7 +391,7 @@ var peek_task = function(id, callback)
         return;
     }
 
-    callback(true);
+    callback(true, queryIndex);
 }
 
 app.get('/awaitTask', function(req, res, next)
@@ -471,6 +471,52 @@ app.get('/awaitComplete', function(req, res, next)
 app.get('/tasks', function(req, res, next)
 {
     res.sendFile("tasks.html", {root: __dirname});
+});
+
+app.get('/progress', function(req, res, next)
+{
+    var name = req.query.name;
+
+    // Find the task we got something back from
+    var queueIndex = task_queue.findIndex(function(element)
+    {
+        return element.name == name;
+    });
+    if(queueIndex == -1)
+    {
+        var filename = output_folder + '/' + name;
+        if(fileExists(filename))
+        {
+            res.status(200);
+            res.end("100%");
+        }
+        else
+        {
+            res.status(400);
+            res.end("No task named: " + name);
+            return;
+        }
+    }
+    else
+    {
+        res.status(200);
+        peek_task(queueIndex, function(available, index)
+        {
+            if(available)
+            {
+                var task_length = task_queue[queueIndex].query.length;
+                var percent = (index / task_length) * 100;
+                res.status(200);
+                res.end(Math.floor(percent * 10) / 10 + "%");
+            }
+            else
+            {
+                res.status(200);
+                res.end("99.9%");
+            }
+        });
+    }
+
 });
 
 app.get('/', function(req, res)
