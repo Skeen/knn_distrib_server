@@ -238,6 +238,7 @@ app.post('/knn', cpUpload, function(req, res, next)
                     return {
                         path: element, 
                         timer: null, 
+                        hostname: null,
                         part: element.substring(element.indexOf('/') + 1).replace(taskname, ''),
                         result: null
                     };
@@ -267,7 +268,7 @@ app.post('/knn', cpUpload, function(req, res, next)
     });
 });
 
-var acquire_task = function(id, callback)
+var acquire_task = function(id, hostname, callback)
 {
     if(id == task_queue.length)
     {
@@ -282,7 +283,7 @@ var acquire_task = function(id, callback)
     });
     if(queryIndex == -1)
     {
-        acquire_task(id+1, callback);
+        acquire_task(id+1, hostname, callback);
         return;
     }
 
@@ -292,11 +293,15 @@ var acquire_task = function(id, callback)
         task.query[queryIndex].timer = null;
     }.bind(null,task,queryIndex), task.timeout);
 
+    task.query[queryIndex].hostname = hostname;
+
     callback(undefined, task.query[queryIndex], task);
 }
 
 app.get('/requestTask', function(req, res, next)
 {
+    var hostname = req.query.name;
+
     if(task_queue.length == 0)
     {
         res.status(202);
@@ -304,7 +309,7 @@ app.get('/requestTask', function(req, res, next)
     }
     else
     {
-        acquire_task(0, function(err, query, task)
+        acquire_task(0, hostname, function(err, query, task)
         {
             if(err)
             {
