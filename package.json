@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "nohup": "nohup npm start &",
-    "clean": "rm -rf splits uploads",
+    "clean": "rm -rf output/ splits/ uploads/ done/",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
