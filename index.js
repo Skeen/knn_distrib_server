@@ -24,6 +24,7 @@ var task_part_done = function(res, task, queryIndex, queueIndex, result, callbac
         {
             res.status(500);
             res.end(JSON.stringify(err));
+            console.error("Fatal error:", JSON.stringify(err));
             return;
         }
         // Remove the query file
@@ -33,6 +34,7 @@ var task_part_done = function(res, task, queryIndex, queueIndex, result, callbac
             {
                 res.status(500);
                 res.end(JSON.stringify(err));
+                console.error("Fatal error:", JSON.stringify(err));
                 return;
             }
 
@@ -74,6 +76,8 @@ var task_complete = function(res, task, queueIndex, callback)
             {
                 res.status(500);
                 res.end(JSON.stringify(err) + JSON.stringify(stderr));
+                console.error("Fatal error:", JSON.stringify(err));
+                console.error(JSON.stringify(stderr));
                 return;
             }
             next(stdout);
@@ -91,12 +95,41 @@ var task_complete = function(res, task, queueIndex, callback)
             {
                 remove(starts + '*', error_handler(function()
                 {
-                    console.log("Task:", task.name, "done!");
-                    task_queue_emitter.emit('complete', task.name, result);
-                    // Remove from the task queue
-                    task_queue.splice(queueIndex, 1);
-                    task_queue_emitter.emit('remove', queueIndex);
-                    callback();
+                    var task_string = JSON.stringify(task, function(key, value)
+                    {
+                        if(key == 'timer')
+                        {
+                            if(value == null)
+                            {
+                                return null;
+                            }
+                            else
+                            {
+                                return "Timer active!";
+                            }
+                        }
+                        else 
+                        {
+                            return value; 
+                        }
+                    });
+
+                    var task_output_name = output_folder + '/' + task.name + '_task.json';
+                    fs.writeFile(task_output_name, task_string, function(err) 
+                    {
+                        if(err)
+                        {
+                            console.warn("Couldn't update task file!");
+                            return;
+                        }
+
+                        console.log("Task:", task.name, "done!");
+                        task_queue_emitter.emit('complete', task.name, result);
+                        // Remove from the task queue
+                        task_queue.splice(queueIndex, 1);
+                        task_queue_emitter.emit('remove', queueIndex);
+                        callback();
+                    });
                 }));
             }));
         }));
@@ -203,13 +236,16 @@ app.post('/knn', cpUpload, function(req, res, next)
         {
             res.status(500);
             res.end(JSON.stringify(err));
+            console.error("Fatal error:", JSON.stringify(err));
             return;
         }
         // Check lines are a multiple of 3
         if((lines % 3) != 0)
         {
             res.status(400);
-            res.end("#Lines in query isn't a multiple of 3!");
+            var err = "#Lines in query isn't a multiple of 3!";
+            res.end(err);
+            console.error("Fatal error:", err);
             return;
         }
         var taskname = shortid.generate();
@@ -219,6 +255,7 @@ app.post('/knn', cpUpload, function(req, res, next)
             {
                 res.status(500);
                 res.end(JSON.stringify(err));
+                console.error("Fatal error:", JSON.stringify(err));
                 return;
             }
             ls('./' + split_folder, function(err, tree)
@@ -227,6 +264,7 @@ app.post('/knn', cpUpload, function(req, res, next)
                 {
                     res.status(500);
                     res.end(JSON.stringify(err));
+                    console.error("Fatal error:", JSON.stringify(err));
                     return;
                 }
                 var filtered = tree.filter(function(element)
@@ -459,6 +497,7 @@ app.get('/awaitComplete', function(req, res, next)
                 {
                     res.status(500);
                     res.end(JSON.stringify(err));
+                    console.error("Fatal error:", JSON.stringify(err));
                     return;
                 }
                 res.status(200);
