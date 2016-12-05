@@ -339,6 +339,11 @@ var acquire_task = function(id, hostname, callback)
 app.get('/requestTask', function(req, res, next)
 {
     var hostname = req.query.name;
+    if(hostname)
+    {
+        computeNodes[hostname] = (computeNodes[hostname] || {});
+        computeNodes[hostname].lastSeen = new Date();
+    }
 
     if(task_queue.length == 0)
     {
@@ -455,6 +460,13 @@ var peek_task = function(id, callback)
 
 app.get('/awaitTask', function(req, res, next)
 {
+    var hostname = req.query.name;
+    if(hostname)
+    {
+        computeNodes[hostname] = (computeNodes[hostname] || {});
+        computeNodes[hostname].lastSeen = new Date();
+    }
+
     peek_task(0, function(available, index)
     {
         if(available)
@@ -531,6 +543,13 @@ app.get('/awaitComplete', function(req, res, next)
 app.get('/tasks', function(req, res, next)
 {
     res.sendFile("tasks.html", {root: __dirname});
+});
+
+var computeNodes = {};
+app.get('/computeNodes', function(req, res, next)
+{
+    res.status(200);
+    res.end(JSON.stringify(computeNodes));
 });
 
 app.get('/progress', function(req, res, next)
