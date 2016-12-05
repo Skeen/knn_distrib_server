@@ -341,8 +341,7 @@ app.get('/requestTask', function(req, res, next)
     var hostname = req.query.name;
     if(hostname)
     {
-        computeNodes[hostname] = (computeNodes[hostname] || {});
-        computeNodes[hostname].lastSeen = new Date();
+        computeNodes[hostname] = new Date();
     }
 
     if(task_queue.length == 0)
@@ -463,8 +462,7 @@ app.get('/awaitTask', function(req, res, next)
     var hostname = req.query.name;
     if(hostname)
     {
-        computeNodes[hostname] = (computeNodes[hostname] || {});
-        computeNodes[hostname].lastSeen = new Date();
+        computeNodes[hostname] = new Date();
     }
 
     peek_task(0, function(available, index)
