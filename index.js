@@ -341,7 +341,7 @@ app.get('/requestTask', function(req, res, next)
     var hostname = req.query.name;
     if(hostname)
     {
-        computeNodes[hostname] = new Date();
+        computeNodes[hostname] = Date.now();
     }
 
     if(task_queue.length == 0)
@@ -462,7 +462,7 @@ app.get('/awaitTask', function(req, res, next)
     var hostname = req.query.name;
     if(hostname)
     {
-        computeNodes[hostname] = new Date();
+        computeNodes[hostname] = Date.now();
     }
 
     peek_task(0, function(available, index)
@@ -546,8 +546,34 @@ app.get('/tasks', function(req, res, next)
 var computeNodes = {};
 app.get('/computeNodes', function(req, res, next)
 {
+    var output_mode = req.query.output;
+    var output = null;
+    if(output_mode == "relative")
+    {
+        var rel_map = {};
+        Object.keys(computeNodes).forEach(function(key)
+        {
+            var value = computeNodes[key];
+            rel_map[key] = (Date.now() - value);
+        });
+        output = rel_map;
+    }
+    else if(output_mode == "absolute")
+    {
+        output = computeNodes;
+    }
+    else
+    {
+        var rel_map = {};
+        Object.keys(computeNodes).forEach(function(key)
+        {
+            var value = computeNodes[key];
+            rel_map[key] = new Date(value);
+        });
+        output = rel_map;
+    }
     res.status(200);
-    res.end(JSON.stringify(computeNodes));
+    res.end(JSON.stringify(output));
 });
 
 app.get('/progress', function(req, res, next)
