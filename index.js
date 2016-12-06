@@ -4,11 +4,11 @@ var cors    = require('cors');
 var link    = require('fs-symlink');
 var mkdirp  = require('mkdirp');
 var ls      = require('list-directory-contents');
-var bodyParser = require('body-parser')
-var shortid = require('shortid');
-var EventEmitter = require('events');
-var fs = require('fs');
-var fileExists = require('file-exists');
+var fs      = require('fs');
+var bodyParser      = require('body-parser')
+var shortid         = require('shortid');
+var EventEmitter    = require('events');
+var fileExists      = require('file-exists');
 
 var app = express();
 var server = null;
