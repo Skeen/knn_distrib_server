@@ -618,22 +618,16 @@ app.get('/progress', function(req, res, next)
     }
     else
     {
-        res.status(200);
-        peek_task(queueIndex, function(available, index)
+        var task = task_queue[queueIndex];
+        var done = task.query.reduce(function(acc, query)
         {
-            if(available)
-            {
-                var task_length = task_queue[queueIndex].query.length;
-                var percent = (index / task_length) * 100;
-                res.status(200);
-                res.end(Math.floor(percent * 10) / 10 + "%");
-            }
-            else
-            {
-                res.status(200);
-                res.end("99.9%");
-            }
-        });
+            return acc + (query.result == null ? 0 : 1);
+        },0);
+
+        var task_length = task.query.length;
+        var percent = (done / task_length) * 100;
+        res.status(200);
+        res.end(Math.floor(percent * 10) / 10 + "%");
     }
 });
 
