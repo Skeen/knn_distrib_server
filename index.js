@@ -1,7 +1,6 @@
 var express = require('express');
 var multer  = require('multer');
 var cors    = require('cors');
-var link    = require('fs-symlink');
 var mkdirp  = require('mkdirp');
 var ls      = require('list-directory-contents');
 var fs      = require('fs');
@@ -190,7 +189,7 @@ var remove = function(file, callback)
     exec('rm ' + file, callback);
 }
 
-var combine_json_executable = 'node ./combine_json/index.js'
+var combine_json_executable = '../node ./combine_json/index.js'
 var combine_json = function(startswith, output_file, callback)
 {
     exec(combine_json_executable + " -o " + output_file + " " + startswith, 
@@ -239,6 +238,14 @@ app.post('/knn', cpUpload, function(req, res, next)
             console.error("Fatal error:", JSON.stringify(err));
             return;
         }
+	if(lines == 0)
+	{
+	    res.status(400);
+	    var err = "Empty query set!";
+            res.end(err);
+            console.error("Fatal error:", err);
+            return;
+	}
         // Check lines are a multiple of 3
         if((lines % 3) != 0)
         {
@@ -281,6 +288,15 @@ app.post('/knn', cpUpload, function(req, res, next)
                         result: null
                     };
                 });
+
+		if(queries.length == 0)
+		{
+		    res.status(400);
+		    var err = "No queries in task!";
+		    res.end(err);
+		    console.error("Fatal error:", err);
+		    return;
+		}
 
                 var task = {
                     name: taskname,
