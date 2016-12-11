@@ -1,22 +1,25 @@
 <html>
 <head>
-    <title>Reading Reciever</title>
+    <title>Dynamic Time Warping - Server</title>
 </head>
 <body>
-    <h1>Reading Reciever</h1>
+    <h1>
+        Dynamic Time Warping - Server
+    </h1>
 
-    Upload files to the server, by sending a 'multipart/form-data' POST request at '/upload'.
-    <br>
-    See the 'example/index.html' for details.
-    <br><br>
-    See all uploaded files at:<br>
-    * <a href="/uploads/">/uploads/</a>
-    <br><br>
-    And the symlinked files at:<br>
-    * <a href="/symlinks/">/symlinks/</a>
-    <br><br>
-    And the visualized files at:<br>
-    * <a href="/visualize/">/visualize/</a>
-
+    Check when compute-nodes last checked in at:
+    <ul>
+        <li> <a href="/computeNodes">/computeNodes</a> </li>
+        <li> <a href="/computeNodes?output=relative">/computeNodes?output=relative</a> </li>
+        <li> <a href="/computeNodes?output=absolute">/computeNodes?output=absolute</a> </li>
+    </ul>
+    See the task_queue at:
+    <ul>
+        <li> <a href="/tasksJSON">/tasksJSON</a> </li>
+    </ul>
+    And shutdown the server at:
+    <ul>
+        <li> <a href="/shutdown/">/shutdown</a> </li>
+    </ul>
 </body>
 </html>
