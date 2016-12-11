@@ -189,12 +189,18 @@ var remove = function(file, callback)
     exec('rm ' + file, callback);
 }
 
-var combine_json_executable = '../node ./combine_json/index.js'
+//var combine_json_executable = '../node ./combine_json/index.js'
 var combine_json = function(startswith, output_file, callback)
 {
+	/*
     exec(combine_json_executable + " -o " + output_file + " " + startswith, 
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);
+	*/
+    exec("cat " + startswith + " | tr --delete '\n' | sed 's/\]\[/,/g' > " + output_file,
+            {maxBuffer: Number.POSITIVE_INFINITY},
+            callback);
+	    
 }
 
 // Upload file to server
