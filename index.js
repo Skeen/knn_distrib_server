@@ -67,7 +67,7 @@ var task_part_done = function(res, task, queryIndex, queueIndex, result, callbac
 
 var task_complete = function(res, task, queueIndex, callback)
 {
-    var error_handler = function(next)
+    var error_handler = function(next, ignore_errors)
     {
         return function(err, stdout, stderr)
         {
@@ -77,7 +77,8 @@ var task_complete = function(res, task, queueIndex, callback)
                 res.end(JSON.stringify(err) + JSON.stringify(stderr));
                 console.error("Fatal error:", JSON.stringify(err));
                 console.error(JSON.stringify(stderr));
-                return;
+                if(!ignore_errors)
+		   return;
             }
             next(stdout);
         }
@@ -92,8 +93,8 @@ var task_complete = function(res, task, queueIndex, callback)
             var starts = done_folder + "/" + task.name + "_part_";
             combine_json(starts, output_folder + '/' + task.name, error_handler(function(result)
             {
-                remove(starts + '*', error_handler(function()
-                {
+                //remove(starts + '*', error_handler(function()
+                //{
                     var task_string = JSON.stringify(task, function(key, value)
                     {
                         if(key == 'timer')
@@ -129,10 +130,10 @@ var task_complete = function(res, task, queueIndex, callback)
                         task_queue_emitter.emit('remove', queueIndex);
                         callback();
                     });
-                }));
+                //}, true));
             }));
-        }));
-    }));
+        },true));
+    }, true));
 }
 
 
@@ -197,10 +198,11 @@ var combine_json = function(startswith, output_file, callback)
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);
 	*/
-    exec("cat " + startswith + " | tr --delete '\n' | sed 's/\]\[/,/g' > " + output_file,
+    var command = "cat " + startswith + "* | tr --delete '\\n' | tr ',' '\\n' | sed 's/\\]\\[/,/g' | tr '\\n' ',' > " + output_file;
+    console.log("comm", command);
+    exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
-            callback);
-	    
+            callback);    
 }
 
 // Upload file to server
@@ -457,6 +459,25 @@ app.get('/tasksJSON', function(req, res, next)
     res.end(task_queue_string());
 });
 
+app.get('/tasksRelease',function(req, res)
+{
+	var released = 0;
+	task_queue.forEach(function(task)
+	{
+	    task.query.forEach(function(query)
+	    {
+		if(!query.result && query.timer)
+		{
+            	    clearTimeout(query.timer);
+            	    query.timer = null;
+		    released++;
+		}
+	    });
+	});
+	res.status(200);
+	res.end("Released " + released + " tasks.");
+});
+
 var peek_task = function(id, callback)
 {
     if(id >= task_queue.length)
@@ -653,6 +674,24 @@ app.get('/shutdown', function(req, res)
     res.end("Shutting down!");
 });
 
+app.get('/complete', function(req, res)
+{
+	task_queue.forEach(function(task, queueIndex)
+	{
+	    var all_done = task.query.reduce(function(a, b)
+            {
+                return a && (b.result != undefined);
+            }, true);
+            // If it is complete, annouce it, and run complete handler
+            if(all_done)
+            {
+                task.complete(res, task, queueIndex, function(){});
+            }
+	});
+	res.status(200);
+	res.end("Done");
+});
+
 app.get('/', function(req, res)
 {
     res.sendFile("index.html", {root: __dirname});
@@ -704,4 +743,3 @@ fs.readFile(task_queue_file, 'utf8', function(err, data)
     });
     server = require('http-shutdown')(app_server);
 });
-
