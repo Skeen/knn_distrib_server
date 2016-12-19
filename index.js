@@ -124,7 +124,7 @@ var task_complete = function(res, task, queueIndex, callback)
                         }
 
                         console.log("Task:", task.name, "done!");
-                        task_queue_emitter.emit('complete', task.name);
+                        task_queue_emitter.emit('complete', task.name, result);
                         // Remove from the task queue
                         task_queue.splice(queueIndex, 1);
                         task_queue_emitter.emit('remove', queueIndex);
@@ -193,7 +193,12 @@ var remove = function(file, callback)
 //var combine_json_executable = '../node ./combine_json/index.js'
 var combine_json = function(startswith, output_file, callback)
 {
-    var command = "tar cfzv " + output_file + " " + startswith + "*";
+	/*
+    exec(combine_json_executable + " -o " + output_file + " " + startswith, 
+            {maxBuffer: Number.POSITIVE_INFINITY},
+            callback);
+	*/
+    var command = "cat " + startswith + "* | tr --delete '\\n' | tr ',' '\\n' | sed 's/\\]\\[/,/g' | tr '\\n' ',' > " + output_file;
     console.log("comm", command);
     exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
@@ -529,12 +534,17 @@ app.get('/awaitComplete', function(req, res, next)
 {
     var name = req.query.name;
 
-    var reply_file = function()
+    // Find the task we got something back from
+    var queueIndex = task_queue.findIndex(function(element)
+    {
+        return element.name == name;
+    });
+    if(queueIndex == -1)
     {
         var filename = output_folder + '/' + name;
         if(fileExists(filename))
         {
-            fs.readFile(filename, 'binary', function(err, data) 
+            fs.readFile(filename, 'utf8', function(err, data) 
             {
                 if (err) 
                 {
@@ -544,7 +554,7 @@ app.get('/awaitComplete', function(req, res, next)
                     return;
                 }
                 res.status(200);
-                res.end(data, 'binary');
+                res.end(data);
             });
         }
         else
@@ -554,23 +564,14 @@ app.get('/awaitComplete', function(req, res, next)
             return;
         }
     }
-
-    // Find the task we got something back from
-    var queueIndex = task_queue.findIndex(function(element)
-    {
-        return element.name == name;
-    });
-    if(queueIndex == -1)
-    {
-        reply_file();
-    }
     else
     {
         var callback = function(task_name, str)
         {
             if(task_name == name)
             {
-                reply_file();
+                res.status(200);
+                res.end(str);
                 task_queue_emitter.removeListener('complete', callback);
             }
         }
