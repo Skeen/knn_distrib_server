@@ -204,6 +204,19 @@ var acquire_task = function(id, callback)
     callback(undefined, task.query[queryIndex], task);
 }
 
+app.get('/requestRelease', function(req, res, next)
+{
+	taskqueue.forEach(
+		function(task)
+		{
+			task.query.forEach(
+				function(query)
+				{
+					query.timer = null;
+				});
+		});
+}
+
 app.get('/requestTask', function(req, res, next)
 {
     if(task_queue.length == 0)
