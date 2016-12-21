@@ -124,7 +124,7 @@ var task_complete = function(res, task, queueIndex, callback)
                         }
 
                         console.log("Task:", task.name, "done!");
-                        task_queue_emitter.emit('complete', task.name, result);
+                        task_queue_emitter.emit('complete', task.name);
                         // Remove from the task queue
                         task_queue.splice(queueIndex, 1);
                         task_queue_emitter.emit('remove', queueIndex);
@@ -193,13 +193,7 @@ var remove = function(file, callback)
 //var combine_json_executable = '../node ./combine_json/index.js'
 var combine_json = function(startswith, output_file, callback)
 {
-	/*
-    exec(combine_json_executable + " -o " + output_file + " " + startswith, 
-            {maxBuffer: Number.POSITIVE_INFINITY},
-            callback);
-	*/
-    var command = "cat " + startswith + "* | tr --delete '\\n' | tr ',' '\\n' | sed 's/\\]\\[/,/g' | tr '\\n' ',' > " + output_file;
-    //console.log("comm", command);
+    var command = "tar cfzv " + output_file + " " + startswith + "*";
     exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);    
@@ -534,17 +528,12 @@ app.get('/awaitComplete', function(req, res, next)
 {
     var name = req.query.name;
 
-    // Find the task we got something back from
-    var queueIndex = task_queue.findIndex(function(element)
-    {
-        return element.name == name;
-    });
-    if(queueIndex == -1)
+    var reply_file = function()
     {
         var filename = output_folder + '/' + name;
         if(fileExists(filename))
         {
-            fs.readFile(filename, 'utf8', function(err, data) 
+            fs.readFile(filename, 'binary', function(err, data) 
             {
                 if (err) 
                 {
@@ -554,7 +543,7 @@ app.get('/awaitComplete', function(req, res, next)
                     return;
                 }
                 res.status(200);
-                res.end(data);
+                res.end(data, 'binary');
             });
         }
         else
@@ -564,14 +553,23 @@ app.get('/awaitComplete', function(req, res, next)
             return;
         }
     }
+
+    // Find the task we got something back from
+    var queueIndex = task_queue.findIndex(function(element)
+    {
+        return element.name == name;
+    });
+    if(queueIndex == -1)
+    {
+        reply_file();
+    }
     else
     {
         var callback = function(task_name, str)
         {
             if(task_name == name)
             {
-                res.status(200);
-                res.end(str);
+                reply_file();
                 task_queue_emitter.removeListener('complete', callback);
             }
         }
@@ -656,6 +654,17 @@ app.get('/progress', function(req, res, next)
         res.status(200);
         res.end(Math.floor(percent * 10) / 10 + "%");
     }
+});
+
+app.get('/requestRelease', function(req, res)
+{
+	taskqueue.forEach(function(task)
+	{
+		task.query.forEach(function(query)
+		{
+			query.timer = null;
+		});
+	});
 });
 
 app.get('/shutdown', function(req, res)
