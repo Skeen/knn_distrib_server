@@ -199,7 +199,7 @@ var combine_json = function(startswith, output_file, callback)
             callback);
 	*/
     var command = "cat " + startswith + "* | tr --delete '\\n' | tr ',' '\\n' | sed 's/\\]\\[/,/g' | tr '\\n' ',' > " + output_file;
-    console.log("comm", command);
+    //console.log("comm", command);
     exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);    
