@@ -1,0 +1,4 @@
+[submodule "combine_json"]
+	path = combine_json
+	url = git@github.com:Skeen/combine_json.git
+	branch = master
