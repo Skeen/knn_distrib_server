@@ -657,6 +657,17 @@ app.get('/progress', function(req, res, next)
     }
 });
 
+app.get('/requestRelease', function(req, res)
+{
+	taskqueue.forEach(function(task)
+	{
+		task.query.forEach(function(query)
+		{
+			query.timer = null;
+		});
+	});
+});
+
 app.get('/shutdown', function(req, res)
 {
     // Shutdown everything
