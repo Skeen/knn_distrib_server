@@ -354,6 +354,19 @@ var acquire_task = function(id, hostname, callback)
     callback(undefined, task.query[queryIndex], task);
 }
 
+app.get('/requestRelease', function(req, res, next)
+{
+	taskqueue.forEach(
+		function(task)
+		{
+			task.query.forEach(
+				function(query)
+				{
+					query.timer = null;
+				});
+		});
+}
+
 app.get('/requestTask', function(req, res, next)
 {
     var hostname = req.query.name;
@@ -538,18 +551,7 @@ app.get('/awaitComplete', function(req, res, next)
         var filename = output_folder + '/' + name;
         if(fileExists(filename))
         {
-            fs.readFile(filename, 'utf8', function(err, data) 
-            {
-                if (err) 
-                {
-                    res.status(500);
-                    res.end(JSON.stringify(err));
-                    console.error("Fatal error:", JSON.stringify(err));
-                    return;
-                }
-                res.status(200);
-                res.end(data);
-            });
+            res.redirect(filename);
         }
         else
         {
