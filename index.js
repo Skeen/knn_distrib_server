@@ -365,7 +365,7 @@ app.get('/requestRelease', function(req, res, next)
 					query.timer = null;
 				});
 		});
-}
+});
 
 app.get('/requestTask', function(req, res, next)
 {
