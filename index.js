@@ -534,18 +534,7 @@ app.get('/awaitComplete', function(req, res, next)
         var filename = output_folder + '/' + name;
         if(fileExists(filename))
         {
-            fs.readFile(filename, 'binary', function(err, data) 
-            {
-                if (err) 
-                {
-                    res.status(500);
-                    res.end(JSON.stringify(err));
-                    console.error("Fatal error:", JSON.stringify(err));
-                    return;
-                }
-                res.status(200);
-                res.end(data, 'binary');
-            });
+            res.redirect(filename);
         }
         else
         {
