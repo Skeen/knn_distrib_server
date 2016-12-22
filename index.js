@@ -193,13 +193,7 @@ var remove = function(file, callback)
 //var combine_json_executable = '../node ./combine_json/index.js'
 var combine_json = function(startswith, output_file, callback)
 {
-	/*
-    exec(combine_json_executable + " -o " + output_file + " " + startswith, 
-            {maxBuffer: Number.POSITIVE_INFINITY},
-            callback);
-	*/
-    var command = "cat " + startswith + "* | tr --delete '\\n' | tr ',' '\\n' | sed 's/\\]\\[/,/g' | tr '\\n' ',' > " + output_file;
-    console.log("comm", command);
+    var command = "tar cfzv " + output_file + " " + startswith + "*";
     exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);    
@@ -656,6 +650,17 @@ app.get('/progress', function(req, res, next)
         res.status(200);
         res.end(Math.floor(percent * 10) / 10 + "%");
     }
+});
+
+app.get('/requestRelease', function(req, res)
+{
+	taskqueue.forEach(function(task)
+	{
+		task.query.forEach(function(query)
+		{
+			query.timer = null;
+		});
+	});
 });
 
 app.get('/shutdown', function(req, res)
