@@ -90,10 +90,10 @@ var task_complete = function(res, task, queueIndex, callback)
         remove(task.reference, error_handler(function()
         {
             // Combine the result
-            var starts = done_folder + "/" + task.name + "_part_";
-            combine_json(starts, output_folder + '/' + task.name, error_handler(function(result)
+            var starts = task.name + "_part_";
+            combine_json(done_folder + "/", starts, output_folder + '/' + task.name, error_handler(function(result)
             {
-                //remove(starts + '*', error_handler(function()
+                //remove(done_folder + "/" + starts + '*', error_handler(function()
                 //{
                     var task_string = JSON.stringify(task, function(key, value)
                     {
@@ -190,10 +190,10 @@ var remove = function(file, callback)
     exec('rm ' + file, callback);
 }
 
-//var combine_json_executable = '../node ./combine_json/index.js'
-var combine_json = function(startswith, output_file, callback)
+var combine_json = function(folder, startswith, output_file, callback)
 {
-    var command = "tar cfzv " + output_file + " " + startswith + "*";
+    var command = "ls " + folder + startswith + "* | sed 's#" + folder + "##g' | tar czf " + output_file + " -C " + folder + " -T -";
+    console.log(command);
     exec(command,
             {maxBuffer: Number.POSITIVE_INFINITY},
             callback);    
