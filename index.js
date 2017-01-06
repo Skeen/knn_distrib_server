@@ -603,18 +603,8 @@ app.get('/awaitComplete', function(req, res, next)
     }
     else
     {
-        var callback = function(task_name, str)
-        {
-            if(task_name == name)
-            {
-                res.status(200);
-                res.end(str);
-                task_queue_emitter.removeListener('complete', callback);
-            }
-        }
-
-        // It's still running
-        task_queue_emitter.addListener('complete', callback);
+        res.status(400);
+        res.end("Not transfered to disk yet!");
     }
 });
 
