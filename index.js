@@ -125,7 +125,7 @@ var task_complete = function(res, task, queueIndex, callback)
                         }
 
                         console.log("Task:", task.name, "done!");
-                        task_queue_emitter.emit('complete', task.name, result);
+                        task_queue_emitter.emit('complete', task.name);
                         // Remove from the task queue
                         task_queue.splice(queueIndex, 1);
                         task_queue_emitter.emit('remove', queueIndex);
