@@ -4,6 +4,7 @@ var cors    = require('cors');
 var mkdirp  = require('mkdirp');
 var ls      = require('list-directory-contents');
 var fs      = require('fs');
+var md5File = require('md5-file')
 var bodyParser      = require('body-parser')
 var shortid         = require('shortid');
 var EventEmitter    = require('events');
@@ -535,6 +536,46 @@ app.get('/awaitTask', function(req, res, next)
             task_queue_emitter.addListener('add', callback);
         }
     });
+});
+
+app.get('/awaitMD5', function(req, res, next)
+{
+    var name = req.query.name;
+
+    // Find the task we got something back from
+    var queueIndex = task_queue.findIndex(function(element)
+    {
+        return element.name == name;
+    });
+    if(queueIndex == -1)
+    {
+        var filename = output_folder + '/' + name;
+        if(fileExists(filename))
+        {
+            md5File(filename, function(err, hash)
+            {
+                if(err)
+                {
+                    res.status(500);
+                    res.end(JSON.stringify(err));
+                    return;
+                }
+
+                res.status(200);
+                res.end(hash);
+            });
+        }
+        else
+        {
+            res.status(400);
+            res.end("No task named: " + name);
+        }
+    }
+    else
+    {
+        res.status(400);
+        res.end("Not transfered to disk yet!");
+    }
 });
 
 app.get('/awaitComplete', function(req, res, next)
